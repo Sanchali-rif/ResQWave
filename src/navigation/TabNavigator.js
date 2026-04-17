@@ -10,7 +10,27 @@ const Tab = createBottomTabNavigator();
 
 export default function TabNavigator() {
     return (
-        <Tab.Navigator screenOptions={{ headerShown: false }}>
+        <Tab.Navigator
+            screenOptions={{
+                headerShown: false,
+
+                // Tab bar styling
+                tabBarStyle: {
+                    backgroundColor: "#1a1a1c",
+                    borderTopWidth: 0,
+                    height: 60,
+                    paddingBottom: 5,
+                },
+
+                tabBarActiveTintColor: "#ff6b6b",
+                tabBarInactiveTintColor: "#888",
+
+                tabBarLabelStyle: {
+                    fontSize: 12,
+                    fontWeight: "500",
+                },
+            }}
+        >
             <Tab.Screen name="Map" component={MapScreen} />
             <Tab.Screen name="Alerts" component={AlertsScreen} />
             <Tab.Screen name="SOS" component={SOSScreen} />
