@@ -29,6 +29,11 @@ const C = {
     outlineVariant:        "#5d3f3b",
 };
 
+// ─── Filter → level mapping ─────────────────────────────────────────────────
+// "Critical"  = IMMEDIATE  (life-threatening)
+// "Injured"   = PRIORITY   (injured / urgent)
+// "OK"        = ROUTINE    (status / supply)
+
 // ─── Data ─────────────────────────────────────────────────────────────────────
 const ALERTS = [
     {
@@ -43,6 +48,7 @@ const ALERTS = [
         gpsTag: "FRESH GPS",
         gpsColor: C.tertiary,
         gpsIcon: "✓",
+        filterCategory: "Critical",
         action: "ROUTE",
         actionBg: C.buttonSalmon,
         actionText: "#000",
@@ -60,6 +66,7 @@ const ALERTS = [
         gpsTag: "ESTIMATED",
         gpsColor: C.secondary,
         gpsIcon: "⚠",
+        filterCategory: "Injured",
         action: "ASSIGN",
         actionBg: C.buttonSalmon,
         actionText: "#000",
@@ -77,6 +84,7 @@ const ALERTS = [
         gpsTag: "FRESH GPS",
         gpsColor: C.tertiary,
         gpsIcon: "✓",
+        filterCategory: "OK",
         action: "VIEW",
         actionBg: C.surfaceContainerHighest,
         actionText: "rgba(255,255,255,0.5)",
@@ -152,6 +160,11 @@ function AlertCard({ item }) {
 export default function AlertsScreen() {
     const [activeFilter, setActiveFilter] = useState("All");
 
+    const visibleAlerts =
+        activeFilter === "All"
+            ? ALERTS
+            : ALERTS.filter((a) => a.filterCategory === activeFilter);
+
     return (
         <View style={styles.root}>
             <ScrollView
@@ -213,7 +226,13 @@ export default function AlertsScreen() {
                 </ScrollView>
 
                 {/* ── Alert Cards ── */}
-                {ALERTS.map((alert) => (
+                {visibleAlerts.length === 0 && (
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyIcon}>📭</Text>
+                        <Text style={styles.emptyText}>No {activeFilter} alerts</Text>
+                    </View>
+                )}
+                {visibleAlerts.map((alert) => (
                     <AlertCard key={alert.id} item={alert} />
                 ))}
 
@@ -491,5 +510,23 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontStyle: "italic",
         lineHeight: 16,
+    },
+
+    // Empty state
+    emptyState: {
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 48,
+        gap: 12,
+    },
+    emptyIcon: {
+        fontSize: 36,
+    },
+    emptyText: {
+        color: C.onSurfaceVariant,
+        fontSize: 13,
+        fontWeight: "700",
+        textTransform: "uppercase",
+        letterSpacing: 1.5,
     },
 });
