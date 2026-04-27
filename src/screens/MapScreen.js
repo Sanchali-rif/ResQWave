@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import {
     View,
     Text,
@@ -7,8 +7,12 @@ import {
     Animated,
     Easing,
     Dimensions,
-    ScrollView,
 } from "react-native";
+
+const ZOOM_MIN  = 0.5;
+const ZOOM_MAX  = 3.0;
+const ZOOM_STEP = 0.25;
+const ZOOM_INIT = 1.0;
 
 const { width: W, height: H } = Dimensions.get("window");
 
@@ -138,15 +142,14 @@ function LeftColumn() {
 }
 
 // ─── Right Control Cluster ─────────────────────────────────────────────────────
-function RightCluster() {
-    const [zoom, setZoom] = useState(1);
+function RightCluster({ zoomAnim, zoomLevel, onZoom, onRecenter }) {
     return (
         <View style={styles.rightCluster}>
             <CtrlBtn icon="⊞" />
-            <CtrlBtn icon="+" onPress={() => setZoom(z => Math.min(z + 0.25, 3))} />
-            <CtrlBtn icon="−" onPress={() => setZoom(z => Math.max(z - 0.25, 0.5))} />
+            <CtrlBtn icon="+" onPress={() => onZoom(+ZOOM_STEP)} />
+            <CtrlBtn icon="−" onPress={() => onZoom(-ZOOM_STEP)} />
             <View style={{ height: 16 }} />
-            <CtrlBtn icon="◎" accent />
+            <CtrlBtn icon="◎" accent onPress={onRecenter} />
         </View>
     );
 }
@@ -155,8 +158,8 @@ function CtrlBtn({ icon, onPress, accent }) {
     const scale = useRef(new Animated.Value(1)).current;
     const handlePress = () => {
         Animated.sequence([
-            Animated.timing(scale, { toValue: 0.88, duration: 80, useNativeDriver: true }),
-            Animated.timing(scale, { toValue: 1,    duration: 120, useNativeDriver: true }),
+            Animated.timing(scale, { toValue: 0.82, duration: 70,  useNativeDriver: true }),
+            Animated.timing(scale, { toValue: 1,    duration: 130, useNativeDriver: true }),
         ]).start();
         onPress?.();
     };
@@ -271,6 +274,49 @@ function DotGrid() {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function MapScreen() {
+    // ── Zoom state ────────────────────────────────────────────────────────────
+    const zoomAnim   = useRef(new Animated.Value(ZOOM_INIT)).current;
+    const zoomRef    = useRef(ZOOM_INIT);
+    const [zoomLevel, setZoomLevel] = useState(ZOOM_INIT);
+
+    // HUD badge
+    const hudOpacity = useRef(new Animated.Value(0)).current;
+    const hudTimeout = useRef(null);
+
+    const showHud = useCallback(() => {
+        if (hudTimeout.current) clearTimeout(hudTimeout.current);
+        Animated.timing(hudOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+        hudTimeout.current = setTimeout(() => {
+            Animated.timing(hudOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start();
+        }, 900);
+    }, [hudOpacity]);
+
+    const handleZoom = useCallback((delta) => {
+        const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, parseFloat((zoomRef.current + delta).toFixed(2))));
+        if (next === zoomRef.current) return;
+        zoomRef.current = next;
+        setZoomLevel(next);
+        Animated.timing(zoomAnim, {
+            toValue: next,
+            duration: 220,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+        }).start();
+        showHud();
+    }, [zoomAnim, showHud]);
+
+    const handleRecenter = useCallback(() => {
+        zoomRef.current = ZOOM_INIT;
+        setZoomLevel(ZOOM_INIT);
+        Animated.timing(zoomAnim, {
+            toValue: ZOOM_INIT,
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+        }).start();
+        showHud();
+    }, [zoomAnim, showHud]);
+
     return (
         <View style={styles.root}>
             {/* Telemetry status strip */}
@@ -281,26 +327,34 @@ export default function MapScreen() {
                 {/* Dark base */}
                 <View style={styles.mapBase} />
 
-                {/* Dot grid */}
-                <DotGrid />
+                {/* ── Zoomable layer (scale transform applied here) ── */}
+                <Animated.View
+                    style={[
+                        StyleSheet.absoluteFill,
+                        { transform: [{ scale: zoomAnim }] },
+                    ]}
+                    pointerEvents="none"
+                >
+                    <DotGrid />
+                    <ScanLine />
+                    <UncertaintyRing />
+                    <GPSMarker />
+                </Animated.View>
 
-                {/* Scan line */}
-                <ScanLine />
-
-                {/* Uncertainty ring */}
-                <UncertaintyRing />
-
-                {/* GPS marker — centred */}
-                <GPSMarker />
-
-                {/* Left data column */}
+                {/* ── Fixed overlays (not scaled) ── */}
                 <LeftColumn />
-
-                {/* Right controls */}
-                <RightCluster />
-
-                {/* Bottom bento tray */}
+                <RightCluster
+                    zoomAnim={zoomAnim}
+                    zoomLevel={zoomLevel}
+                    onZoom={handleZoom}
+                    onRecenter={handleRecenter}
+                />
                 <BottomTray />
+
+                {/* ── Zoom HUD badge ── */}
+                <Animated.View style={[styles.zoomHud, { opacity: hudOpacity }]} pointerEvents="none">
+                    <Text style={styles.zoomHudText}>{zoomLevel.toFixed(2)}×</Text>
+                </Animated.View>
             </View>
         </View>
     );
@@ -559,6 +613,28 @@ const styles = StyleSheet.create({
         color: C.onBackground,
         fontSize: 18,
         fontWeight: "600",
+    },
+
+    // ── Zoom HUD ──────────────────────────────────────────────────────────────
+    zoomHud: {
+        position: "absolute",
+        top: 16,
+        alignSelf: "center",
+        left: "50%",
+        transform: [{ translateX: -28 }],
+        backgroundColor: "rgba(27,27,29,0.92)",
+        borderWidth: 1,
+        borderColor: C.primary,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        zIndex: 50,
+    },
+    zoomHudText: {
+        color: C.primary,
+        fontSize: 11,
+        fontWeight: "800",
+        letterSpacing: 1.5,
+        fontFamily: "monospace",
     },
 
     // ── Bottom Bento Tray ─────────────────────────────────────────────────────
