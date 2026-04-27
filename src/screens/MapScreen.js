@@ -85,6 +85,8 @@ function UncertaintyRing() {
 // ─── GPS Marker ────────────────────────────────────────────────────────────────
 function GPSMarker() {
     const glow = useRef(new Animated.Value(1)).current;
+    const [showTag, setShowTag] = useState(true);
+
     useEffect(() => {
         Animated.loop(
             Animated.sequence([
@@ -93,102 +95,156 @@ function GPSMarker() {
             ])
         ).start();
     }, []);
+
     return (
-        <View style={styles.markerWrapper} pointerEvents="none">
+        <View style={styles.markerWrapper}>
             {/* Glow blob */}
-            <Animated.View style={[styles.markerGlow, { transform: [{ scale: glow }] }]} />
-            {/* Icon square */}
-            <View style={styles.markerIcon}>
-                <Text style={styles.markerIconText}>▲</Text>
-            </View>
-            {/* Telemetry tag */}
-            <View style={styles.telemetryTag}>
-                <View style={styles.tagRow}>
-                    <Text style={styles.tagLabel}>Current Node</Text>
-                    <Text style={styles.tagCoord}>35.6895° N</Text>
+            <Animated.View style={[styles.markerGlow, { transform: [{ scale: glow }] }]} pointerEvents="none" />
+            
+            {/* Icon square - Interactive */}
+            <TouchableOpacity activeOpacity={0.8} onPress={() => setShowTag(!showTag)}>
+                <View style={styles.markerIcon}>
+                    <Text style={styles.markerIconText}>▲</Text>
                 </View>
-                <View style={styles.tagRow}>
-                    <Text style={styles.tagName}>USER_01_DELTA</Text>
-                    <Text style={styles.tagCoord}>139.6917° E</Text>
+            </TouchableOpacity>
+
+            {/* Telemetry tag - Toggleable */}
+            {showTag && (
+                <View style={styles.telemetryTag} pointerEvents="none">
+                    <View style={styles.tagRow}>
+                        <Text style={styles.tagLabel}>Current Node</Text>
+                        <Text style={styles.tagCoord}>35.6895° N</Text>
+                    </View>
+                    <View style={styles.tagRow}>
+                        <Text style={styles.tagName}>USER_01_DELTA</Text>
+                        <Text style={styles.tagCoord}>139.6917° E</Text>
+                    </View>
                 </View>
-            </View>
+            )}
         </View>
     );
 }
 
 // ─── Left Data Column ─────────────────────────────────────────────────────────
-function LeftColumn() {
+function LeftColumn({ onShowHud }) {
     return (
-        <View style={styles.leftColumn} pointerEvents="none">
+        <View style={styles.leftColumn}>
             {/* Environment */}
-            <View style={[styles.dataCard, { borderLeftColor: C.secondary }]}>
+            <TouchableOpacity 
+                activeOpacity={0.7} 
+                onPress={() => onShowHud("AMBIENT SENSORS: NOMINAL")}
+                style={[styles.dataCard, { borderLeftColor: C.secondary }]}
+            >
                 <Text style={[styles.dataCardLabel, { color: C.secondary }]}>Environment</Text>
                 <View style={styles.dataCardRow}>
                     <Text style={styles.dataCardValue}>14.2°C</Text>
                     <Text style={styles.dataCardIcon}>🌡</Text>
                 </View>
                 <Text style={styles.dataCardSub}>Humidity: 84%</Text>
-            </View>
+            </TouchableOpacity>
+
             {/* Heading */}
-            <View style={[styles.dataCard, { borderLeftColor: C.primary }]}>
+            <TouchableOpacity 
+                activeOpacity={0.7} 
+                onPress={() => onShowHud("MAGNETIC HEADING: 284°")}
+                style={[styles.dataCard, { borderLeftColor: C.primary }]}
+            >
                 <Text style={[styles.dataCardLabel, { color: C.primary }]}>Heading</Text>
                 <View style={styles.dataCardRow}>
                     <Text style={styles.dataCardValue}>284° WNW</Text>
                     <Text style={styles.dataCardIcon}>🧭</Text>
                 </View>
-            </View>
+            </TouchableOpacity>
         </View>
     );
 }
 
 // ─── Right Control Cluster ─────────────────────────────────────────────────────
-function RightCluster({ zoomAnim, zoomLevel, onZoom, onRecenter }) {
+function RightCluster({ onZoom, onRecenter }) {
     return (
         <View style={styles.rightCluster}>
-            <CtrlBtn icon="⊞" />
-            <CtrlBtn icon="+" onPress={() => onZoom(+ZOOM_STEP)} />
-            <CtrlBtn icon="−" onPress={() => onZoom(-ZOOM_STEP)} />
+            <CtrlBtn icon="⊞" label="LAYERS" />
+            <CtrlBtn icon="+" label="ZOOM IN"  onPress={() => onZoom(+ZOOM_STEP)} />
+            <CtrlBtn icon="−" label="ZOOM OUT" onPress={() => onZoom(-ZOOM_STEP)} />
             <View style={{ height: 16 }} />
-            <CtrlBtn icon="◎" accent onPress={onRecenter} />
+            <CtrlBtn icon="◎" label="MY LOCATION" accent onPress={onRecenter} />
         </View>
     );
 }
 
-function CtrlBtn({ icon, onPress, accent }) {
-    const scale = useRef(new Animated.Value(1)).current;
+function CtrlBtn({ icon, label, onPress, accent }) {
+    const scale      = useRef(new Animated.Value(1)).current;
+    const tipOpacity = useRef(new Animated.Value(0)).current;
+    const tipTransX  = useRef(new Animated.Value(6)).current;
+    const tipTimer   = useRef(null);
+
     const handlePress = () => {
+        // Button spring
         Animated.sequence([
             Animated.timing(scale, { toValue: 0.82, duration: 70,  useNativeDriver: true }),
             Animated.timing(scale, { toValue: 1,    duration: 130, useNativeDriver: true }),
         ]).start();
+
+        // Tooltip slide-in
+        if (tipTimer.current) clearTimeout(tipTimer.current);
+        tipTransX.setValue(10);
+        Animated.parallel([
+            Animated.timing(tipOpacity, { toValue: 1, duration: 160, useNativeDriver: true }),
+            Animated.timing(tipTransX,  { toValue: 0, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        ]).start();
+
+        // Auto-hide after 1.2 s
+        tipTimer.current = setTimeout(() => {
+            Animated.timing(tipOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+        }, 1200);
+
         onPress?.();
     };
+
     return (
-        <TouchableOpacity onPress={handlePress} activeOpacity={1}>
-            <Animated.View style={[
-                styles.ctrlBtn,
-                accent && styles.ctrlBtnAccent,
-                { transform: [{ scale }] },
-            ]}>
-                <Text style={[styles.ctrlBtnText, accent && { color: C.primary }]}>{icon}</Text>
+        <View style={styles.ctrlBtnWrapper}>
+            {/* Tooltip label (floats to the left) */}
+            <Animated.View
+                style={[
+                    styles.tooltip,
+                    { opacity: tipOpacity, transform: [{ translateX: tipTransX }] },
+                ]}
+                pointerEvents="none"
+            >
+                <Text style={styles.tooltipText}>{label}</Text>
             </Animated.View>
-        </TouchableOpacity>
+
+            <TouchableOpacity onPress={handlePress} activeOpacity={1}>
+                <Animated.View style={[
+                    styles.ctrlBtn,
+                    accent && styles.ctrlBtnAccent,
+                    { transform: [{ scale }] },
+                ]}>
+                    <Text style={[styles.ctrlBtnText, accent && { color: C.primary }]}>{icon}</Text>
+                </Animated.View>
+            </TouchableOpacity>
+        </View>
     );
 }
 
 // ─── Bottom Bento Tray ─────────────────────────────────────────────────────────
-function BottomTray() {
+function BottomTray({ onShowHud }) {
     const sosScale = useRef(new Animated.Value(1)).current;
     const handleSOS = () => {
         Animated.sequence([
             Animated.timing(sosScale, { toValue: 0.9, duration: 100, useNativeDriver: true }),
             Animated.timing(sosScale, { toValue: 1,   duration: 150, useNativeDriver: true }),
         ]).start();
+        onShowHud("INITIATING EMERGENCY SOS...", 2000);
     };
     return (
         <View style={styles.tray}>
             {/* Telemetry strip */}
-            <View style={styles.trayTelemetry}>
+            <TouchableOpacity 
+                activeOpacity={0.9} 
+                onPress={() => onShowHud("SYSTEM TELEMETRY: SYNCED")}
+                style={styles.trayTelemetry}
+            >
                 <View style={styles.trayCell}>
                     <Text style={styles.trayCellLabel}>Altitude</Text>
                     <View style={styles.trayCellValueRow}>
@@ -209,7 +265,7 @@ function BottomTray() {
                         <Text style={[styles.trayCellValue, { color: C.tertiary }]}>94%</Text>
                     </View>
                 </View>
-            </View>
+            </TouchableOpacity>
 
             {/* SOS Button */}
             <TouchableOpacity onPress={handleSOS} activeOpacity={0.85}>
@@ -218,6 +274,21 @@ function BottomTray() {
                     <Text style={styles.sosBtnText}>SEND SOS</Text>
                 </Animated.View>
             </TouchableOpacity>
+        </View>
+    );
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
+function Header() {
+    return (
+        <View style={styles.header}>
+            <View style={styles.headerLeft}>
+                <Text style={styles.headerIcon}>📶</Text>
+                <Text style={styles.headerTitle}>RESQWAVE</Text>
+            </View>
+            <View style={styles.headerRight}>
+                <Text style={styles.headerIcon}>📡</Text>
+            </View>
         </View>
     );
 }
@@ -237,11 +308,17 @@ function StatusStrip() {
         <View style={styles.statusStrip}>
             <View style={styles.statusLeft}>
                 <Animated.View style={[styles.statusDot, { opacity: dot }]} />
-                <Text style={styles.statusText}>Connection: <Text style={styles.statusVal}>Online</Text></Text>
+                <TouchableOpacity activeOpacity={0.7}>
+                    <Text style={styles.statusText}>Connection: <Text style={styles.statusVal}>Online</Text></Text>
+                </TouchableOpacity>
                 <View style={styles.statusDivider} />
-                <Text style={styles.statusText}>⊙ GPS: <Text style={styles.statusVal}>Live</Text></Text>
+                <TouchableOpacity activeOpacity={0.7}>
+                    <Text style={styles.statusText}>⊙ GPS: <Text style={styles.statusVal}>Live</Text></Text>
+                </TouchableOpacity>
             </View>
-            <Text style={styles.statusText}>Queue: <Text style={styles.statusVal}>0</Text></Text>
+            <TouchableOpacity activeOpacity={0.7}>
+                <Text style={styles.statusText}>Queue: <Text style={styles.statusVal}>0</Text></Text>
+            </TouchableOpacity>
         </View>
     );
 }
@@ -279,16 +356,18 @@ export default function MapScreen() {
     const zoomRef    = useRef(ZOOM_INIT);
     const [zoomLevel, setZoomLevel] = useState(ZOOM_INIT);
 
-    // HUD badge
+    // HUD message system
     const hudOpacity = useRef(new Animated.Value(0)).current;
     const hudTimeout = useRef(null);
+    const [hudMsg, setHudMsg] = useState("");
 
-    const showHud = useCallback(() => {
+    const showHud = useCallback((msg, duration = 900) => {
         if (hudTimeout.current) clearTimeout(hudTimeout.current);
+        setHudMsg(msg);
         Animated.timing(hudOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
         hudTimeout.current = setTimeout(() => {
             Animated.timing(hudOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start();
-        }, 900);
+        }, duration);
     }, [hudOpacity]);
 
     const handleZoom = useCallback((delta) => {
@@ -302,7 +381,7 @@ export default function MapScreen() {
             easing: Easing.out(Easing.quad),
             useNativeDriver: true,
         }).start();
-        showHud();
+        showHud(`${next.toFixed(2)}× ZOOM`);
     }, [zoomAnim, showHud]);
 
     const handleRecenter = useCallback(() => {
@@ -314,11 +393,14 @@ export default function MapScreen() {
             easing: Easing.out(Easing.quad),
             useNativeDriver: true,
         }).start();
-        showHud();
+        showHud("POSITION RECENTERED");
     }, [zoomAnim, showHud]);
 
     return (
         <View style={styles.root}>
+            {/* Top Bar Branding */}
+            <Header />
+
             {/* Telemetry status strip */}
             <StatusStrip />
 
@@ -342,18 +424,16 @@ export default function MapScreen() {
                 </Animated.View>
 
                 {/* ── Fixed overlays (not scaled) ── */}
-                <LeftColumn />
+                <LeftColumn onShowHud={showHud} />
                 <RightCluster
-                    zoomAnim={zoomAnim}
-                    zoomLevel={zoomLevel}
                     onZoom={handleZoom}
                     onRecenter={handleRecenter}
                 />
-                <BottomTray />
+                <BottomTray onShowHud={showHud} />
 
-                {/* ── Zoom HUD badge ── */}
+                {/* ── HUD badge ── */}
                 <Animated.View style={[styles.zoomHud, { opacity: hudOpacity }]} pointerEvents="none">
-                    <Text style={styles.zoomHudText}>{zoomLevel.toFixed(2)}×</Text>
+                    <Text style={styles.zoomHudText}>{hudMsg}</Text>
                 </Animated.View>
             </View>
         </View>
@@ -365,6 +445,38 @@ const styles = StyleSheet.create({
     root: {
         flex: 1,
         backgroundColor: C.background,
+    },
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    header: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: C.background,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 2,
+        borderBottomColor: C.surfaceContainerHigh,
+    },
+    headerLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    headerIcon: {
+        color: C.primary,
+        fontSize: 18,
+    },
+    headerTitle: {
+        color: C.primary,
+        fontSize: 20,
+        fontWeight: "900",
+        letterSpacing: 2,
+        textTransform: "uppercase",
+    },
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
     },
 
     // ── Status Strip ──────────────────────────────────────────────────────────
@@ -597,6 +709,26 @@ const styles = StyleSheet.create({
         flexDirection: "column",
         gap: 4,
     },
+    ctrlBtnWrapper: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "flex-end",
+    },
+    tooltip: {
+        backgroundColor: "rgba(27,27,29,0.95)",
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginRight: 8,
+        borderRightWidth: 2,
+        borderRightColor: C.primary,
+    },
+    tooltipText: {
+        color: C.onBackground,
+        fontSize: 9,
+        fontWeight: "900",
+        letterSpacing: 1.2,
+        textTransform: "uppercase",
+    },
     ctrlBtn: {
         width: 46,
         height: 46,
@@ -621,20 +753,23 @@ const styles = StyleSheet.create({
         top: 16,
         alignSelf: "center",
         left: "50%",
-        transform: [{ translateX: -28 }],
+        transform: [{ translateX: -100 }],
+        width: 200,
         backgroundColor: "rgba(27,27,29,0.92)",
         borderWidth: 1,
         borderColor: C.primary,
         paddingHorizontal: 10,
-        paddingVertical: 4,
+        paddingVertical: 6,
         zIndex: 50,
+        alignItems: "center",
     },
     zoomHudText: {
         color: C.primary,
-        fontSize: 11,
-        fontWeight: "800",
+        fontSize: 10,
+        fontWeight: "900",
         letterSpacing: 1.5,
-        fontFamily: "monospace",
+        textTransform: "uppercase",
+        textAlign: "center",
     },
 
     // ── Bottom Bento Tray ─────────────────────────────────────────────────────
